@@ -8,42 +8,38 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 
-def draw_image(image, results, labels, size):
+def draw_image(image, results, labels, h,w):
     result_size = len(results)
-    set_input_tensor(interpreter, image)
-    interpreter.invoke()
-    #print(size,'**************')
     for idx, obj in enumerate(results):
-        print('obj is',obj)
-        # Prepare image for drawing
+        #print(obj)
+        #print(results)
         color = (255,0,0)
         thickness = 2
+        # Prepare image for drawing
+        #draw = ImageDraw.Draw(image)
+
         # Prepare boundary box
         ymin, xmin, ymax, xmax = obj['bounding_box']
-        xmin = int(xmin * size[0])
-        xmax = int(xmax * size[0])
-        ymin = int(ymin * size[1])
-        ymax = int(ymax * size[1])
-        if scores[i] >= threshold:
-            result = {
-                'bounding_box': boxes[i],
-                'class_id': classes[i],
-                'score': scores[i]
-            }
-            results.append(result)
-            pic = cv2.rectangle(image, (xmin,ymin), (xmax,ymax), color, thickness)
-        else:
-            pic = image
+        xmin = int(xmin * w)
+        xmax = int(xmax * w)
+        ymin = int(ymin * h)
+        ymax = int(ymax * h)
 
         # Draw rectangle to desired thickness
-#        for x in range( 0, 4 ):
-        #img = cv2.rotate(image, cv2.cv2.ROTATE_90_CLOCKWISE)       
-        
-#            draw.rectangle((ymin, xmin, ymax, xmax), outline=(255, 255, 0))
+        #for x in range( 0, 4 ):
+        #    draw.rectangle((ymin, xmin, ymax, xmax), outline=(255, 255, 0))
 
         # Annotate image with label and confidence score
         #display_str = labels[obj['class_id']] + ": " + str(round(obj['score']*100, 2)) + "%"
         #draw.text((ymin,xmin), display_str, font=ImageFont.truetype("/usr/share/fonts/truetype/piboto/Piboto-Regular.ttf", 20))
+        pic = cv2.rectangle(image, (xmin,ymin), (xmax,ymax), color, thickness)
+        text = str(obj['class_id'])
+        org = (xmin+2,ymin+5)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        fontscale = 2
+        color = (0,255,0)
+        t_thickness = 2
+        pic = cv2.putText(image,text,org,font,fontscale,color,t_thickness)
 
         #displayImage = np.asarray( image )
         cv2.imshow('Coral Live Object Detection', pic)
@@ -97,10 +93,9 @@ def detect_objects(interpreter, image, threshold):
                 'score': scores[i]
             }
             results.append(result)
-
     return results
 
-# Selecting our edgetpu
+
 def make_interpreter(model_file, use_edgetpu):
     model_file, *device = model_file.split('@')
     if use_edgetpu:
@@ -125,7 +120,10 @@ def main():
     args = parser.parse_args()
 
     labels = load_labels(args.labels)
+    start_i = time.clock()
     interpreter = make_interpreter(args.model, args.use_edgetpu)
+    interpreter_make_time = (time.clock() - start_i)
+    print('Time taken to make interpreter',interpreter_make_time)
     interpreter.allocate_tensors()
     _, input_height, input_width, _ = interpreter.get_input_details()[0]['shape']
 
@@ -137,12 +135,16 @@ def main():
         try:
             ret, image = video.read()
             frame_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            frame_resized = cv2.resize(frame_rgb, (input_width, input_height)) # resizes our frame to the model expected size, 300 in case of mobilenet ssd v2
-            input_data = np.expand_dims(frame_resized, axis=0) # expands the dimension on the 0 axis
+            frame_resized = cv2.resize(frame_rgb, (input_width, input_height))
+            input_data = np.expand_dims(frame_resized, axis=0)
             # Perform inference
+            start_j = time.clock()
             results = detect_objects(interpreter, input_data, args.threshold)
-
-            draw_image(image, results, labels, image.shape)
+            results_inference_time=(time.clock() - start_j)
+            print('Time for one inference',results_inference_time)
+            ht,wt = image.shape[0],image.shape[1]
+            #print(ht,wt)
+            draw_image(image, results, labels, ht,wt)
 
             if( cv2.waitKey( 5 ) & 0xFF == ord( 'q' ) ):
                 fps.stop()
